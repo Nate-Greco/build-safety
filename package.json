@@ -1,5 +1,5 @@
 {
-  "name": "campus-signal",
+  "name": "blindspot",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -7,7 +7,7 @@
     "dev": "vite --host 127.0.0.1",
     "build": "tsc -b && vite build",
     "preview": "vite preview --host 127.0.0.1",
-    "test": "tsx --test src/lib/engine.test.ts src/App.test.tsx",
+    "test": "tsx --test src/lib/engine.test.ts src/lib/routing.test.ts src/App.test.tsx",
     "format": "prettier --write src package.json tsconfig.json vite.config.ts index.html"
   },
   "dependencies": {

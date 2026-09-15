@@ -1,44 +1,44 @@
-# Campus Signal
+# BlindSpot
 
-A privacy-first campus safety prototype for the Verkada x UW Blueprint **Build for Safety** hackathon.
+A map-first, privacy-first campus routing prototype for Verkada x UW Blueprint **Build for Safety**.
 
-**Sensor readings -> allowlisted anonymous metadata -> multi-modal fusion -> explainable human review.**
+**Sensor metadata -> corroborated zone risk -> recommended reroute.**
 
 ## Run
 
 ```sh
 npm install
 npm run dev
+npm test
+npm run build
 ```
 
 Open the local URL printed by Vite. On Windows, use `npm.cmd` if PowerShell blocks `npm.ps1`.
 
-```sh
-npm test       # Fusion/privacy checks and the interactive React workflow
-npm run build # TypeScript check and production bundle in dist/
-```
+## Quick Demo
 
-## 60-Second Demo
-
-1. Select **Normal activity**. Events arrive, the campus remains normal, and no intervention is indicated.
-2. Select **After-hours anomaly**. Engineering 7 receives anonymous occupancy, motion, an unexpected door opening, and a sound anomaly. Watch the status move through **Observing** to **Elevated** as evidence accumulates.
-3. Open **Review evidence & privacy**. Point out the three contributing modalities, shared zone, 120-second window, rule, recommended human check, and discarded personal fields. **Mark as reviewed** records a demo acknowledgement without dispatching anything.
-4. Select **Dana Porter Library**. Its local evidence is normal while the campus-level alert remains visible.
-5. Select **Environmental hazard**. Village 1 combines temperature, air quality, and remaining occupancy into a possible hazard.
+1. Start with **South entrance -> Dana Porter Library**, **Safety-Aware**, and **Normal**.
+2. Select **After-hours risk** in **TEST**. Motion, access and audio immediately flag Engineering 7 and reroute the walk. The original remains dashed.
+3. Select **Environmental hazard**. Temperature, air quality and occupancy flag Village 1. Compare Fastest, Weather-Aware, Safety-Aware and Accessible routes.
+4. Click a building or incident marker for compact sensor and privacy indicators. Both panels minimize; the map supports drag, zoom and reset.
+5. Hold the bottom **Alert campus police** button for three seconds, release, then tap that same button three times. It shows **Alert sent** with simulated location sharing. Release early or hold again while armed to cancel. No real dispatch occurs.
 
 ## Main Files
 
-- `src/lib/engine.ts`: simulated readings, privacy transformation, and deterministic fusion rules.
-- `src/App.tsx`: the single-page command center, zone schematic, replay lifecycle, evidence audit, and review interaction.
-- `src/styles.css` and `src/layout.css`: visual components and responsive working layout.
-- `src/lib/engine.test.ts` and `src/App.test.tsx`: 12 tests covering the rules, privacy boundary, and complete UI workflow.
+- `src/App.tsx`: two collapsible panels, scenario replay, route controls and simulated alert consent.
+- `src/CampusMap.tsx`: full-screen interactive campus schematic, zone overlays, markers and route animation.
+- `src/map.css`, `src/navigation.css`, `src/blindspot.css`: map components, mobile navigation, navy/cream theme and wider desktop layout.
+- `src/EmergencyButton.tsx`: hold-to-arm, triple-tap confirmation, cancellation and mock location sharing.
+- `src/lib/engine.ts`: privacy allowlist and existing deterministic sensor-fusion rules.
+- `src/lib/routing.ts`: walking graph and Dijkstra shortest-path routing with flagged zones excluded.
+- Test files cover privacy/fusion, route changes, blocked endpoints, displayed risk boundaries, panel controls and alert confirmation.
 
 ## Prototype Boundaries
 
-- All sensor readings are simulated. The building schematic and sensor inventory are illustrative. No Verkada API, devices, raw recordings, or personal identities are connected.
-- To connect real inputs, replace the simulator with an adapter returning `SensorReading[]`, pass every reading through `normalizeReading`, and feed only the resulting `SafeEvent[]` into state and `fuseEvents`.
-- The normalizer validates and copies an explicit field allowlist. Occupancy is grouped in five-person ranges; extra fields, credentials, media references, and identifiers are dropped. No facial recognition or audio transcription runs.
-- Both alert rules require three distinct modalities in the same zone within 120 seconds. Repeated, future, stale, and cross-zone events cannot supply missing corroboration. A newer observation replaces an older observation of the same modality.
-- Environmental thresholds are illustrative demo values, not calibrated emergency thresholds. Evidence counts are not probabilities, and alerts do not confirm threats or identify people.
-- Events exist in browser memory only. Scenario changes replace them; reload recreates the default synthetic scenario. Simulated time is fixed per scenario for repeatable demos; the two-minute rule is an evidence window, not a wall-clock deletion timer.
-- No backend, database, credentials, analytics, storage, or LLM is required. Fonts and application assets are bundled locally. No external requests are needed during the demo after startup.
+The campus schematic, walking paths, distances, times, current position and sensor events are illustrative. This is not a real navigation or emergency-dispatch service. No devices, police backend, GPS, credentials or LLM are connected.
+
+Both fusion rules require three distinct modalities in the same zone within 120 seconds of simulated time. Demo thresholds are not calibrated emergency thresholds. Raw identifiers and media references are dropped by an explicit allowlist; occupancy is grouped into ranges. State lives only in browser memory.
+
+Routing uses `dijkstrajs`. Fastest prioritizes distance and shows detected route risk. Weather-Aware excludes environmental hazards; Safety-Aware excludes all detected risks. Accessible also avoids stairs and prioritizes paved paths, gentle slopes and step-free entrances. These accessibility attributes are simulated. Blocked endpoints produce no route in the applicable modes.
+
+To connect real sensor metadata, replace the simulator with an adapter returning `SensorReading[]`, normalize every reading through `normalizeReading`, and pass only `SafeEvent[]` to the fusion engine. Fonts are bundled locally; the demo needs no external requests after startup.

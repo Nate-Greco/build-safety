@@ -16,116 +16,265 @@ Object.assign(globalThis, {
   IS_REACT_ACT_ENVIRONMENT: true,
 });
 const container = document.getElementById("root")!;
+// jsdom does not implement the native dialog top layer.
+dom.window.HTMLDialogElement.prototype.showModal = function () {
+  this.setAttribute("open", "");
+};
+dom.window.HTMLDialogElement.prototype.close = function () {
+  this.removeAttribute("open");
+};
 const root = createRoot(container);
 
-// Keep the real replay/timer lifecycle, with shorter delays for integration tests.
-const originalTimeout = window.setTimeout.bind(window);
-window.setTimeout = ((handler: TimerHandler) =>
-  originalTimeout(handler, 5)) as typeof window.setTimeout;
-
-async function click(text: string) {
-  const button = Array.from(container.querySelectorAll("button")).find(
-    (element) =>
-      element.textContent?.includes(text) ||
-      element.getAttribute("aria-label") === text,
+function button(label: string) {
+  const element = Array.from(
+    container.querySelectorAll('button,[role="button"]'),
+  ).find(
+    (item) =>
+      item.getAttribute("aria-label") === label || item.textContent === label,
   );
-  assert.ok(button, `Missing button: ${text}`);
-  await act(async () => button.click());
+  assert.ok(element, "Missing control: " + label);
+  return element;
+}
+async function click(label: string) {
+  await act(async () => {
+    button(label).dispatchEvent(
+      new dom.window.MouseEvent("click", { bubbles: true }),
+    );
+  });
+}
+async function select(label: string, value: string) {
+  const element = container.querySelector(
+    'select[aria-label="' + label + '"]',
+  ) as HTMLSelectElement;
+  assert.ok(element);
+  await act(async () => {
+    element.value = value;
+    element.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+  });
+}
+async function pointer(type: string) {
+  await act(async () => {
+    button("Alert campus police").dispatchEvent(
+      new dom.window.MouseEvent(type, { bubbles: true, button: 0 }),
+    );
+  });
+}
+async function tapAlert() {
+  await pointer("pointerdown");
+  await pointer("pointerup");
+  await click("Alert campus police");
+}
+function phase() {
+  return container
+    .querySelector(".emergency-button")!
+    .getAttribute("data-phase");
+}
+function path() {
+  return container.querySelector(".route-line")?.getAttribute("d");
 }
 
-async function settleReplay() {
-  for (let tick = 0; tick < 5; tick++)
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 15));
-    });
-}
-
-test("the single-page workflow supports scenarios, zones, evidence and review", async () => {
+test("four modes update routes and risk levels while TEST scenarios stay immediate", async () => {
   await act(async () => root.render(<App />));
-  assert.match(container.textContent!, /Unusual after-hours activity/);
-  assert.equal(container.querySelectorAll(".event-row").length, 4);
   assert.equal(
-    container.querySelector(".privacy-metric > strong")?.textContent,
-    "0",
+    container.querySelector(".brand-name")?.textContent,
+    "BlindSpot",
   );
-
-  await click("Normal activity");
-  assert.equal(container.querySelectorAll(".event-row").length, 0);
+  assert.equal(container.querySelectorAll(".mode-option").length, 4);
+  assert.ok(container.querySelector(".emergency-dock"));
+  const baseline = path();
+  await select("Test scenario", "after-hours");
+  assert.notEqual(path(), baseline);
+  assert.equal(
+    container.querySelector(".original-route")!.getAttribute("d"),
+    baseline,
+  );
+  assert.ok(container.querySelector(".zone-elevated .risk-overlay"));
+  await click("Fastest");
+  assert.equal(path(), baseline);
   assert.match(
-    container.querySelector(".fusion-inputs")!.textContent!,
-    /Occupancy/,
+    container.querySelector(".route-summary")!.textContent!,
+    /Risk Level Elevated/,
   );
-  await settleReplay();
-  assert.match(container.textContent!, /Activity within expected patterns/);
-  assert.equal(container.querySelectorAll(".event-row").length, 3);
-
-  await click("After-hours anomaly");
-  await settleReplay();
-  assert.match(container.textContent!, /Unusual after-hours activity/);
-  assert.match(container.textContent!, /3 of 3 supporting signals/);
-  await click("Review evidence & privacy");
-  assert.ok(container.querySelector("#evidence-detail"));
+  await click("Weather-Aware");
+  assert.equal(path(), baseline);
+  await select("Test scenario", "environment");
+  assert.notEqual(path(), baseline);
   assert.match(
-    container.querySelector("#evidence-detail")!.textContent!,
-    /after-hours motion AND unexpected access AND sound anomaly/,
+    container.querySelector(".route-summary")!.textContent!,
+    /Risk Level Low/,
   );
-  assert.match(container.textContent!, /Video frames \/ faces/);
-  await click("Mark as reviewed");
-  assert.match(container.textContent!, /Review recorded for this simulation/);
-
-  await click("Dana Porter Library, Normal");
+  await click("Fastest");
+  assert.equal(path(), baseline);
   assert.match(
-    container.querySelector(".insight-section")!.textContent!,
-    /Activity within expected patterns/,
+    container.querySelector(".route-summary")!.textContent!,
+    /Risk Level High/,
   );
-  assert.equal(container.querySelector("#evidence-detail"), null);
+  await select("Test scenario", "normal");
+  await click("Accessible");
+  assert.notEqual(path(), baseline);
+  assert.ok(container.querySelector(".mode-accessible"));
+  await select("Destination", "village");
+  assert.equal(path(), undefined);
   assert.match(
-    container.querySelector(".feed-location")!.textContent!,
-    /Dana Porter Library/,
+    container.querySelector(".route-summary")!.textContent!,
+    /No route available/,
   );
-  assert.match(
-    container.querySelector(".overview-status")!.textContent!,
-    /1 zone needs attention/,
-  );
-
-  await click("Environmental hazard");
-  await settleReplay();
-  assert.match(
-    container.querySelector(".insight-section")!.textContent!,
-    /Possible environmental hazard/,
-  );
-  assert.match(
-    container.querySelector(".feed-location")!.textContent!,
-    /Village 1/,
-  );
-  assert.equal(container.querySelectorAll(".event-row").length, 3);
-  await click("Review evidence & privacy");
-  assert.match(
-    container.querySelector("#evidence-detail")!.textContent!,
-    /temperature >= 40 C AND PM2.5 >= 55 AND occupancy > 0/,
-  );
-  assert.match(container.textContent!, /Mark as reviewed/);
+  await select("Destination", "library");
+  await click("Safety-Aware");
+  assert.equal(path(), baseline);
 });
 
-test("rapid scenario changes cancel obsolete replay timers", async () => {
-  await click("After-hours anomaly");
-  await click("Environmental hazard");
-  await click("Normal activity");
-  await settleReplay();
+test("controls minimize without hiding TEST; zone sensors and blocked endpoints still work", async () => {
+  await click("Minimize controls");
+  assert.equal(container.querySelector('select[aria-label="Origin"]'), null);
+  assert.ok(container.querySelector('select[aria-label="Test scenario"]'));
+  await click("Expand controls");
+  await click("Select Dana Porter Library");
+  assert.ok(container.querySelector(".incident-content"));
   assert.match(
-    container.querySelector(".insight-section")!.textContent!,
-    /Activity within expected patterns/,
+    container.querySelector(".incident-panel")!.textContent!,
+    /Risk Level Low/,
   );
-  assert.equal(container.querySelectorAll(".event-row").length, 3);
-  assert.equal(
-    container.querySelector(".scenario-active")?.textContent,
-    "Normal activity",
+  await click("Minimize incident panel");
+  await select("Destination", "engineering");
+  await select("Test scenario", "after-hours");
+  assert.equal(path(), undefined);
+  await select("Destination", "library");
+  assert.ok(path());
+  await select("Test scenario", "normal");
+});
+
+test("alert requires a full three-second hold followed by three separate taps", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  await click("Alert campus police");
+  assert.equal(phase(), "idle");
+  await pointer("pointerdown");
+  await act(async () => {
+    t.mock.timers.tick(2999);
+  });
+  assert.equal(phase(), "holding");
+  await pointer("pointerup");
+  await click("Alert campus police");
+  assert.equal(phase(), "idle");
+
+  await pointer("pointerdown");
+  await act(async () => {
+    t.mock.timers.tick(3000);
+  });
+  assert.equal(phase(), "armed");
+  await pointer("pointerup");
+  await click("Alert campus police");
+  assert.match(button("Alert campus police").textContent!, /0\/3/);
+  await tapAlert();
+  assert.equal(phase(), "armed");
+  assert.match(button("Alert campus police").textContent!, /1\/3/);
+  await tapAlert();
+  assert.equal(phase(), "armed");
+  assert.match(button("Alert campus police").textContent!, /2\/3/);
+  assert.equal(container.querySelector("dialog"), null);
+  await tapAlert();
+  assert.equal(phase(), "sent");
+  const popup = container.querySelector("dialog[open]")!;
+  assert.ok(popup);
+  assert.match(popup.textContent!, /Police alerted/);
+  assert.match(popup.textContent!, /Your location shared/);
+  assert.match(popup.textContent!, /User-requested assistance/);
+  assert.match(popup.textContent!, /Low risk/);
+  assert.match(popup.textContent!, /ETA: 4 min/);
+  assert.match(popup.textContent!, /No real dispatch/);
+  await act(async () => {
+    t.mock.timers.tick(1000);
+  });
+  assert.match(popup.textContent!, /ETA: 3:59/);
+  assert.equal(popup.querySelector("progress")?.value, 1);
+  assert.match(button("Alert campus police").textContent!, /Alert sent/);
+  assert.match(
+    button("Alert campus police").textContent!,
+    /Location shared \(demo\)/,
   );
-  assert.doesNotMatch(
-    container.querySelector(".event-list")!.textContent!,
-    /Sound anomaly|Temperature above/,
+  assert.match(
+    container.querySelector(".emergency-note")!.textContent!,
+    /No real dispatch/,
   );
-  assert.equal(container.querySelectorAll("video,audio,iframe").length, 0);
+  await click("Return to Map");
+  assert.equal(container.querySelector("dialog"), null);
+  assert.equal(phase(), "sent");
+  assert.ok(path());
+  await tapAlert();
+  assert.equal(phase(), "idle");
+});
+
+test("armed alerts cancel by holding again, Escape, or changing incident context", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  async function arm() {
+    await pointer("pointerdown");
+    await act(async () => {
+      t.mock.timers.tick(3000);
+    });
+    await pointer("pointerup");
+    await click("Alert campus police");
+    assert.equal(phase(), "armed");
+  }
+  await arm();
+  await tapAlert();
+  await pointer("pointerdown");
+  await act(async () => {
+    t.mock.timers.tick(1200);
+  });
+  await pointer("pointerup");
+  await click("Alert campus police");
+  assert.equal(phase(), "idle");
+  await arm();
+  await act(async () => {
+    window.dispatchEvent(
+      new dom.window.KeyboardEvent("keydown", { key: "Escape" }),
+    );
+  });
+  assert.equal(phase(), "idle");
+  await arm();
+  await select("Test scenario", "environment");
+  assert.equal(phase(), "idle");
+  await pointer("pointerdown");
+  await pointer("pointercancel");
+  await act(async () => {
+    t.mock.timers.tick(4000);
+  });
+  assert.equal(phase(), "idle");
+});
+
+test("keyboard hold and three confirmation presses use the same emergency control", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  async function key(type: string) {
+    await act(async () => {
+      button("Alert campus police").dispatchEvent(
+        new dom.window.KeyboardEvent(type, { key: " ", bubbles: true }),
+      );
+    });
+  }
+  await key("keydown");
+  await act(async () => {
+    t.mock.timers.tick(3000);
+  });
+  await key("keyup");
+  assert.equal(phase(), "armed");
+  for (let index = 0; index < 3; index++) {
+    await key("keydown");
+    await key("keyup");
+  }
+  assert.equal(phase(), "sent");
+  assert.match(
+    container.querySelector("dialog")!.textContent!,
+    /Environmental hazard/,
+  );
+  assert.match(container.querySelector("dialog")!.textContent!, /High risk/);
+  await act(async () => {
+    container
+      .querySelector("dialog")!
+      .dispatchEvent(new dom.window.Event("cancel", { cancelable: true }));
+  });
+  assert.equal(container.querySelector("dialog"), null);
+  await click("Alert campus police");
+  assert.equal(phase(), "idle");
 });
 
 after(async () => {
